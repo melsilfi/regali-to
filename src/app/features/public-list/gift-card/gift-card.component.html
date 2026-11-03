@@ -1,0 +1,55 @@
+<article
+  class="gift-card gift-card-public card group overflow-hidden transition duration-300 hover:-translate-y-0.5"
+  [class.gift-card-available]="gift().status === 'AVAILABLE'"
+  [class.opacity-80]="gift().status !== 'AVAILABLE'"
+>
+  <app-loading-image
+    [src]="photo().src"
+    [alt]="gift().name"
+    [fill]="true"
+    [class.gift-photo-logo]="!gift().imageUrl"
+    [class.grayscale]="gift().status !== 'AVAILABLE'"
+    [class.transition]="true"
+    [class.duration-500]="true"
+    [class.group-hover:scale-[1.03]]="true"
+  />
+  <div class="gift-card-badges">
+    <div class="gift-card-heading">
+      <div class="gift-card-status">
+        <app-status-badge [status]="gift().status" />
+      </div>
+    </div>
+  </div>
+  @if (gift().externalUrl) {
+    <p-button
+      class="absolute right-3 top-3 z-10"
+      icon="pi pi-eye"
+      [rounded]="true"
+      styleClass="gift-view-btn"
+      ariaLabel="Ver producto"
+      (onClick)="openProduct()"
+    />
+  }
+
+  <div class="gift-card-info">
+    <p class="gift-priority" [attr.data-priority]="gift().priority || 'MEDIUM'">
+      <i class="pi pi-flag-fill" aria-hidden="true"></i>
+      {{ priorityLabel(gift().priority) }}
+    </p>
+    <h3 class="gift-card-title font-serif text-2xl leading-tight">{{ gift().name }}</h3>
+    @if (photo().example) {
+      <span class="w-fit rounded-full bg-paper/95 px-3 py-1 text-xs text-ink/70">Foto de ejemplo</span>
+    }
+    <p class="gift-card-desc text-sm leading-6">{{ gift().description }}</p>
+    <div class="gift-actions mt-auto flex flex-col gap-2 pt-2">
+      @if (interactive() && gift().status === 'AVAILABLE') {
+        <p-button label="Quiero regalar esto" icon="pi pi-gift" [rounded]="true" [fluid]="true" (onClick)="reserve.emit(gift())" />
+        <p-button label="Sugerir otra versión" icon="pi pi-sparkles" [rounded]="true" [fluid]="true" severity="secondary" styleClass="gift-suggest-btn" (onClick)="suggest.emit(gift())" />
+      } @else if (gift().status === 'RESERVED') {
+        <p class="rounded-2xl bg-cream px-4 py-3 text-center text-sm text-ink/70">Alguien ya lo eligió.</p>
+      } @else if (gift().status === 'RECEIVED') {
+        <p class="rounded-2xl bg-sage-soft px-4 py-3 text-center text-sm text-sage">Este regalo ya llegó.</p>
+      }
+    </div>
+  </div>
+</article>

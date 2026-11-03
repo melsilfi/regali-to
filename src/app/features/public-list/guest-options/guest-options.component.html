@@ -1,0 +1,171 @@
+<section>
+  @if (section() === 'stores') {
+    <h2 class="text-center font-serif text-4xl"><i class="pi pi-shop mr-2" aria-hidden="true"></i>Locales</h2>
+    <p class="mt-3 text-center text-ink/70">La lista está a nombre de los dueños en estos locales.</p>
+  } @else {
+    <h2 class="text-center font-serif text-4xl"><i class="pi pi-wallet mr-2" aria-hidden="true"></i>Transferencia</h2>
+    <p class="mt-3 text-center text-ink/70">Podés transferir y dejar una dedicatoria.</p>
+  }
+
+  @if (section() === 'stores') {
+    <div class="store-list mt-14">
+      @for (store of options().stores; track store.name) {
+        <article class="store-card tone-card card card-glass px-5 py-4">
+          <div class="store-card-side">
+            @if (storeSocialHref(store.socialUrl); as href) {
+              <a class="store-card-name" [href]="href" target="_blank" rel="noopener noreferrer">{{ store.name }}</a>
+            } @else {
+              <h3 class="store-card-name">{{ store.name }}</h3>
+            }
+            @if (store.address) {
+              <p class="mt-2 text-sm font-semibold">{{ store.address }}</p>
+            }
+            @if (mapFrame(store); as src) {
+              <a class="store-map-preview" [href]="storeMapHref(store)" target="_blank" rel="noopener noreferrer" aria-label="Ver en el mapa">
+                <iframe [src]="src" title="" tabindex="-1" loading="lazy"></iframe>
+                <i class="pi pi-map-marker store-map-pin" aria-hidden="true"></i>
+              </a>
+            }
+          </div>
+          <div class="store-card-main">
+            <div class="store-card-meta min-w-0 space-y-2 text-sm">
+              @if (store.underName) {
+                <p>A nombre de {{ store.underName }}</p>
+              }
+              @if (store.note) {
+                <p class="leading-6">{{ store.note }}</p>
+              }
+            </div>
+            <button type="button" class="btn-primary" (click)="openStore(store)" [disabled]="example()">
+              <i class="pi pi-shopping-bag" aria-hidden="true"></i>
+              Encontré el regalo
+            </button>
+          </div>
+        </article>
+      }
+    </div>
+  }
+
+  @if (section() === 'transfers') {
+    <div class="mt-14 grid grid-cols-1 gap-4 md:grid-cols-2">
+      @for (account of options().transfers; track account.cbu + account.alias) {
+        <article class="tone-card card card-glass px-5 py-4" [class.copy-open]="copyMenu() === copyKey(account)">
+          <h3 class="font-serif text-2xl">{{ account.holder || 'Datos para transferir' }}</h3>
+          <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div class="min-w-0 space-y-2 text-sm">
+              @if (account.bank) {
+                <p>
+                  <span class="block text-xs text-muted">Banco</span>
+                  <span>{{ account.bank }}</span>
+                </p>
+              }
+              @if (account.alias) {
+                <p>
+                  <span class="block text-xs text-muted">Alias</span>
+                  <span>{{ account.alias }}</span>
+                </p>
+              }
+              @if (account.cbu) {
+                <p>
+                  <span class="block text-xs text-muted">CBU</span>
+                  <span class="break-all font-medium">{{ account.cbu }}</span>
+                </p>
+              }
+              @if (example()) {
+                <p class="text-ink/60">Estos datos son de ejemplo.</p>
+              }
+            </div>
+            <div class="flex w-full flex-wrap gap-2 sm:w-auto">
+              @if (account.alias || account.cbu) {
+                <div class="copy-menu-wrap">
+                  <button type="button" class="btn-secondary min-w-0 flex-1 sm:flex-none" (click)="toggleCopy(account)">
+                    <i class="pi pi-copy" aria-hidden="true"></i>
+                    {{ copied() === account.alias || copied() === account.cbu ? 'Copiado' : 'Copiar' }}
+                  </button>
+                  @if (copyMenu() === copyKey(account)) {
+                    <div class="copy-menu" role="menu">
+                      @if (account.alias) {
+                        <button type="button" role="menuitem" (click)="copyTransfer(account.alias)">Copiar alias</button>
+                      }
+                      @if (account.cbu) {
+                        <button type="button" role="menuitem" (click)="copyTransfer(account.cbu)">Copiar CBU</button>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+              <button type="button" class="btn-primary min-w-0 flex-1 sm:flex-none" (click)="openTransfer(account)" [disabled]="example()">
+                <i class="pi pi-wallet" aria-hidden="true"></i>
+                Avisar
+              </button>
+            </div>
+          </div>
+        </article>
+      }
+    </div>
+  }
+</section>
+
+@if (storeOpen(); as store) {
+  <div class="fixed inset-0 z-40 grid place-items-end bg-ink/40 p-0 sm:place-items-center sm:p-6" (click)="storeOpen.set(null)">
+    <section
+      class="card max-h-[92dvh] w-full overflow-auto rounded-b-none p-6 sm:max-w-lg sm:rounded-3xl"
+      role="dialog"
+      aria-modal="true"
+      (click)="$event.stopPropagation()"
+    >
+      <p class="text-xs uppercase tracking-[0.16em] text-muted">{{ store.name }}</p>
+      <h2 class="mt-2 font-serif text-3xl">Encontré el regalo</h2>
+      <p class="mt-2 text-sm leading-6 text-ink/70">Contá qué compraste.</p>
+      <form class="mt-6 space-y-4" [formGroup]="visitForm" (ngSubmit)="submitVisit()">
+        <label class="block"><span class="label">Tu nombre</span><input class="field" formControlName="buyer" autocomplete="name" /></label>
+        <label class="block"><span class="label">Qué es</span><textarea class="field min-h-24 resize-none" formControlName="note"></textarea></label>
+        <label class="block"><span class="label">Dedicatoria</span><textarea class="field min-h-20 resize-none" formControlName="dedication"></textarea></label>
+        @if (visitError()) {
+          <p class="field-error">{{ visitError() }}</p>
+        }
+        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" class="btn-secondary" (click)="storeOpen.set(null)" [disabled]="saving()">
+            <i class="pi pi-times" aria-hidden="true"></i>
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving()">
+            <i class="pi pi-check" aria-hidden="true"></i>
+            {{ saving() ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (transferOpen(); as account) {
+  <div class="fixed inset-0 z-40 grid place-items-end bg-ink/40 p-0 sm:place-items-center sm:p-6" (click)="transferOpen.set(null)">
+    <section
+      class="card max-h-[92dvh] w-full overflow-auto rounded-b-none p-6 sm:max-w-lg sm:rounded-3xl"
+      role="dialog"
+      aria-modal="true"
+      (click)="$event.stopPropagation()"
+    >
+      <p class="text-xs uppercase tracking-[0.16em] text-muted">{{ account.alias || account.cbu }}</p>
+      <h2 class="mt-2 font-serif text-3xl">Avisar transferencia</h2>
+      <form class="mt-6 space-y-4" [formGroup]="transferForm" (ngSubmit)="submitTransfer()">
+        <label class="block"><span class="label">Tu nombre</span><input class="field" formControlName="buyer" autocomplete="name" /></label>
+        <label class="block"><span class="label">Dedicatoria</span><textarea class="field min-h-20 resize-none" formControlName="dedication"></textarea></label>
+        @if (transferError()) {
+          <p class="field-error">{{ transferError() }}</p>
+        }
+        <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" class="btn-secondary" (click)="transferOpen.set(null)" [disabled]="saving()">
+            <i class="pi pi-times" aria-hidden="true"></i>
+            Cancelar
+          </button>
+          <button type="submit" class="btn-primary" [disabled]="saving()">
+            <i class="pi pi-check" aria-hidden="true"></i>
+            {{ saving() ? 'Guardando…' : 'Guardar' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}

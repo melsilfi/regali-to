@@ -1,0 +1,16 @@
+<div class="fixed inset-0 z-[1300] grid place-items-end bg-ink/40 p-4 sm:place-items-center" (click)="closed.emit(false)">
+  <section class="card w-full max-w-md p-6" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <h2 class="font-serif text-3xl">{{ title() }}</h2>
+    <p class="mt-3 leading-7 text-ink/75">{{ message() }}</p>
+    <div class="mt-6 flex flex-wrap gap-2">
+      <button type="button" class="btn-primary" (click)="closed.emit(true)">
+        <i [class]="icon()" aria-hidden="true"></i>
+        {{ confirmLabel() }}
+      </button>
+      <button type="button" class="btn-secondary" (click)="closed.emit(false)">
+        <i class="pi pi-times" aria-hidden="true"></i>
+        Cancelar
+      </button>
+    </div>
+  </section>
+</div>

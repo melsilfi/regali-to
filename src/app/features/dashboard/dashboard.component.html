@@ -1,0 +1,859 @@
+<section class="dashboard px-3 py-4 sm:px-6 sm:py-6">
+  @if (isDemo) {
+    <p class="alert alert-info mt-4">
+      Estás en modo demostración. Los datos viven en este navegador. Para cuentas reales con Gmail, conectá Supabase.
+    </p>
+  }
+  @if (error()) {
+    <p class="alert alert-error mt-4">{{ error() }}</p>
+  }
+
+  @if (loading()) {
+    <div class="card overflow-hidden" aria-hidden="true" aria-busy="true" aria-label="Cargando lista">
+      <header class="list-hero">
+        <div class="list-hero-top">
+          <div class="list-hero-photo animate-pulse bg-sand"></div>
+          <div class="list-hero-body">
+            <div class="flex w-full flex-col items-center gap-2">
+              <div class="h-3 w-16 animate-pulse rounded-full bg-sand"></div>
+              <div class="h-8 w-64 max-w-full animate-pulse rounded-full bg-sand"></div>
+              <div class="h-4 w-80 max-w-full animate-pulse rounded-full bg-sand"></div>
+            </div>
+          </div>
+        </div>
+      </header>
+    </div>
+    <div class="list-nav panel-tabs" aria-hidden="true">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="h-9 w-24 animate-pulse rounded-full bg-sand"></div>
+      }
+    </div>
+    <div class="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="gift-skeleton card" aria-hidden="true">
+          <div class="gift-skeleton-photo animate-pulse"></div>
+          <div class="gift-skeleton-title animate-pulse"></div>
+          <div class="gift-skeleton-status animate-pulse"></div>
+          <div class="gift-skeleton-price animate-pulse"></div>
+          <div class="gift-skeleton-line animate-pulse"></div>
+          <div class="gift-skeleton-btn animate-pulse"></div>
+        </div>
+      }
+    </div>
+  } @else {
+    @if (!selected()) {
+      @if (activeTab() === 'historial') {
+        <app-empty-state icon="pi pi-history" title="Todavía no hay movimientos" text="Cuando tengas una lista y alguien reserve un regalo, avise de un local o de una transferencia, va a quedar acá." />
+      } @else {
+        <app-empty-state
+          icon="pi pi-plus"
+          title="Todavía no tenés listas"
+          text="Hacé click acá para crear tu primera lista, o directamente desde el menú."
+        >
+          <p-button label="Crear lista" icon="pi pi-plus" [rounded]="true" (onClick)="startNewList()" />
+        </app-empty-state>
+      }
+    }
+
+    @if (selected(); as list) {
+      @if (activeTab() !== 'historial') {
+      <section class="list-hero card">
+        <div class="list-hero-blur" [style.--cover]="'url(' + (list.coverImage || '/ejemplos/regalo.jpg') + ')'"></div>
+        <div class="list-hero-fade" aria-hidden="true"></div>
+        <div class="list-hero-top">
+          <div class="list-hero-photo">
+            <img [src]="list.coverImage || '/ejemplos/regalo.jpg'" alt="" />
+          </div>
+          <div class="list-hero-body">
+            <div class="list-hero-copy">
+              <p class="list-hero-kicker">Lista</p>
+              <h1 class="dashboard-list-title list-hero-title break-words font-serif">{{ list.title }}</h1>
+              @if (list.description) {
+                <p class="list-hero-desc">{{ list.description }}</p>
+              }
+            </div>
+            <p-button
+              class="list-share"
+              label="Compartir Lista"
+              icon="pi pi-share-alt"
+              [rounded]="true"
+              severity="secondary"
+              styleClass="list-share-btn"
+              (onClick)="shareOpen.set(true)"
+            />
+          </div>
+        </div>
+        <div class="list-hero-menu-wrap">
+          <button
+            type="button"
+            class="list-hero-menu"
+            aria-label="Opciones de la lista"
+            aria-haspopup="menu"
+            [attr.aria-expanded]="listMenuOpen()"
+            (click)="toggleListMenu($event)"
+          >
+            <i class="pi pi-ellipsis-v" aria-hidden="true"></i>
+          </button>
+          @if (listMenuOpen()) {
+            <div class="list-menu" role="menu">
+              <button type="button" role="menuitem" (click)="editFromMenu()">
+                <i class="pi pi-pencil" aria-hidden="true"></i>
+                Editar
+              </button>
+              <button type="button" role="menuitem" (click)="deleteFromMenu(list)">
+                <i class="pi pi-trash" aria-hidden="true"></i>
+                Eliminar
+              </button>
+            </div>
+          }
+        </div>
+        <div class="list-hero-side">
+          <div class="list-hero-actions">
+            <p-button label="Editar" icon="pi pi-pencil" [rounded]="true" styleClass="icon-plain icon-primary" (onClick)="openEdit()" />
+            <p-button label="Eliminar" icon="pi pi-trash" [rounded]="true" styleClass="icon-plain" (onClick)="askDeleteList(list)" />
+          </div>
+        </div>
+      </section>
+      <div class="list-nav panel-tabs" role="tablist" aria-label="Secciones de la lista">
+        @for (tab of panelTabs; track tab.id) {
+          <button
+            type="button"
+            class="panel-tab"
+            role="tab"
+            [class.is-active]="activeTab() === tab.id"
+            [attr.aria-selected]="activeTab() === tab.id"
+            (click)="onTab(tab.id)"
+          >
+            <i [class]="tab.icon" aria-hidden="true"></i>
+            {{ tab.label }}
+          </button>
+        }
+      </div>
+
+      @if (activeTab() === 'general') {
+            <div class="action-row mt-5">
+              <h3 class="dashboard-section-title font-serif text-2xl">Regalos</h3>
+              <div class="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-end">
+                <label class="history-filters block w-full sm:w-56">
+                  <span class="label">Ver</span>
+                  <p-select
+                    styleClass="history-filter"
+                    size="small"
+                    [options]="giftViews"
+                    optionLabel="label"
+                    optionValue="value"
+                    [ngModel]="giftFilter()"
+                    (onChange)="setGiftFilter($event)"
+                    appendTo="body"
+                    ariaLabel="Elegir qué regalos ver"
+                  >
+                    <ng-template pTemplate="item" let-option>
+                      @if (option.value === 'ALL') {
+                        <span>Todos</span>
+                      } @else {
+                        <app-status-badge [status]="option.value" />
+                      }
+                    </ng-template>
+                    <ng-template pTemplate="selectedItem" let-option>
+                      @if (option.value === 'ALL') {
+                        <span>Todos</span>
+                      } @else {
+                        <app-status-badge [status]="option.value" />
+                      }
+                    </ng-template>
+                  </p-select>
+                </label>
+                <p-button label="Agregar regalo" icon="pi pi-plus" [rounded]="true" (onClick)="goNewGift()" />
+              </div>
+            </div>
+
+            @if (giftsLoading()) {
+              <div class="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Cargando regalos">
+                @for (item of [1, 2, 3, 4]; track item) {
+                  <div class="gift-skeleton card" aria-hidden="true">
+                    <div class="gift-skeleton-photo animate-pulse"></div>
+                    <div class="gift-skeleton-title animate-pulse"></div>
+                    <div class="gift-skeleton-status animate-pulse"></div>
+                    <div class="gift-skeleton-price animate-pulse"></div>
+                    <div class="gift-skeleton-line animate-pulse"></div>
+                    <div class="gift-skeleton-btn animate-pulse"></div>
+                  </div>
+                }
+              </div>
+            } @else if (gifts().length === 0) {
+              <app-empty-state icon="pi pi-gift" title="Todavía no hay regalos" text="Sumá el primero para que tus invitados puedan elegirlo." />
+            } @else if (visibleGifts().length === 0) {
+              <app-empty-state icon="pi pi-filter" title="No hay regalos en este estado" text="Probá con otro filtro o volvé a ver todos." />
+            } @else {
+              <div class="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4" [attr.data-status-reset]="statusReset()">
+                @for (gift of visibleGifts(); track gift.id + statusReset()) {
+                  <article
+                    class="gift-card card group overflow-hidden transition duration-300 hover:-translate-y-0.5"
+                    [id]="'gift-' + gift.id"
+                    [class.suggestion-gift]="pendingFor(gift.id).length"
+                    [class.gift-card-available]="gift.status === 'AVAILABLE'"
+                    [class.opacity-80]="gift.status !== 'AVAILABLE'"
+                  >
+                    @let photo = displayGiftImage(gift);
+                    <app-loading-image
+                      [src]="photo.src"
+                      [alt]="gift.name"
+                      [fill]="true"
+                      [class.gift-photo-logo]="!gift.imageUrl"
+                      [class.grayscale]="gift.status !== 'AVAILABLE'"
+                      [class.transition]="true"
+                      [class.duration-500]="true"
+                      [class.group-hover:scale-[1.03]]="true"
+                    />
+                    @if (pendingFor(gift.id).length) {
+                      <span class="suggestion-mark">
+                        <i class="pi pi-sparkles" aria-hidden="true"></i>
+                        <span>Tenés una sugerencia</span>
+                      </span>
+                      <span class="suggestion-veil" (click)="$event.stopPropagation()">
+                        <p-button label="Ver sugerencia" icon="pi pi-sparkles" [rounded]="true" (onClick)="openSuggestion(gift)" />
+                      </span>
+                    }
+                    <div class="gift-card-badges">
+                      <div class="gift-card-heading">
+                        <div class="gift-card-status">
+                          <app-status-badge [status]="gift.status" />
+                        </div>
+                      </div>
+                    </div>
+                    @if (gift.externalUrl) {
+                      <p-button
+                        class="absolute right-3 top-3 z-10"
+                        icon="pi pi-eye"
+                        [rounded]="true"
+                        styleClass="gift-view-btn"
+                        ariaLabel="Ver producto"
+                        (onClick)="openProduct(gift.externalUrl)"
+                      />
+                    }
+                    @if (gift.status === 'RESERVED') {
+                      <p-button
+                        class="absolute top-3 z-10"
+                        [class.right-16]="!!gift.externalUrl"
+                        [class.right-3]="!gift.externalUrl"
+                        icon="pi pi-info-circle"
+                        [rounded]="true"
+                        styleClass="gift-info-btn"
+                        ariaLabel="Ver quién lo reservó"
+                        (onClick)="openReservation(gift)"
+                      />
+                    }
+                    <div class="gift-card-info">
+                      <p class="gift-priority" [attr.data-priority]="gift.priority || 'MEDIUM'">
+                        <i class="pi pi-flag-fill" aria-hidden="true"></i>
+                        {{ priorityLabel(gift.priority) }}
+                      </p>
+                      <h3 class="gift-card-title font-serif text-2xl leading-tight">{{ gift.name }}</h3>
+                      @if (photo.example) {
+                        <span class="w-fit rounded-full bg-paper/95 px-3 py-1 text-xs text-ink/70">Foto de ejemplo</span>
+                      }
+                      <p class="gift-card-desc text-sm leading-6">{{ gift.description }}</p>
+                      <div class="gift-tools mt-auto">
+                        <label class="block min-w-0 text-sm">
+                          <span class="gift-field-label">Estado</span>
+                          <p-select
+                            class="mt-1"
+                            [options]="statusOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            [ngModel]="gift.status"
+                            (onChange)="changeStatus(gift, $event)"
+                            appendTo="body"
+                          />
+                        </label>
+                        <div class="gift-card-actions">
+                          <p-button label="Editar" icon="pi pi-pencil" [rounded]="true" [fluid]="true" styleClass="icon-plain icon-primary" (onClick)="goGift(gift.id)" />
+                          <p-button label="Eliminar" icon="pi pi-trash" [rounded]="true" [fluid]="true" styleClass="icon-plain" (onClick)="pendingDelete.set(gift)" />
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+      }
+
+      @if (activeTab() === 'locales') {
+        <div class="action-row mt-5">
+          <div>
+            <p class="font-serif text-2xl"><i class="pi pi-shop mr-2" aria-hidden="true"></i>Locales</p>
+            <p class="mt-1 text-sm text-ink/70">Si dejaste una lista en un negocio, el invitado va a ver el lugar y a nombre de quién está.</p>
+          </div>
+          <p-button label="Agregar local" icon="pi pi-plus" [rounded]="true" (onClick)="openStoreDialog()" />
+        </div>
+        @if (guestStores().length === 0) {
+          <app-empty-state icon="pi pi-shop" title="Todavía no hay locales" text="Si dejaste una seña en un negocio, agregalo para que el invitado sepa dónde está." />
+        } @else {
+          <div class="store-list mt-14">
+            @for (store of guestStores(); track $index) {
+              <article class="store-card tone-card card card-glass p-4">
+                <div class="store-card-side">
+                  <div class="card-title-row">
+                    @if (storeSocialHref(store.socialUrl); as href) {
+                      <a class="store-card-name" [href]="href" target="_blank" rel="noopener noreferrer">{{ store.name }}</a>
+                    } @else {
+                      <h3 class="store-card-name">{{ store.name }}</h3>
+                    }
+                  </div>
+                  <div class="card-icon-actions">
+                    <p-button label="Editar" icon="pi pi-pencil" [rounded]="true" styleClass="icon-plain icon-primary" ariaLabel="Editar local" (onClick)="editStore($index)" />
+                    <p-button label="Eliminar" icon="pi pi-trash" [rounded]="true" styleClass="icon-plain" ariaLabel="Quitar local" (onClick)="askRemoveStore($index)" />
+                  </div>
+                  <div class="store-card-rest">
+                  <p class="mt-2 text-sm font-semibold">{{ store.address }}</p>
+                  @if (mapFrame(store); as src) {
+                    <a class="store-map-preview" [href]="storeMapHref(store)" target="_blank" rel="noopener noreferrer" aria-label="Ver en el mapa">
+                      <iframe [src]="src" title="" tabindex="-1" loading="lazy"></iframe>
+                      <i class="pi pi-map-marker store-map-pin" aria-hidden="true"></i>
+                    </a>
+                  }
+                  <div class="store-card-meta min-w-0 space-y-2 text-sm">
+                    @if (store.underName) {
+                      <p>A nombre de {{ store.underName }}</p>
+                    }
+                    @if (store.note) {
+                      <p class="leading-6">{{ store.note }}</p>
+                    }
+                  </div>
+                  </div>
+                </div>
+              </article>
+            }
+          </div>
+        }
+      }
+
+      @if (activeTab() === 'transferencias') {
+        <div class="action-row mt-5">
+          <div>
+            <p class="font-serif text-2xl"><i class="pi pi-wallet mr-2" aria-hidden="true"></i>Transferencias</p>
+            <p class="mt-1 text-sm text-ink/70">El invitado ve estos datos si quiere transferir en lugar de elegir un regalo.</p>
+          </div>
+          <p-button label="Agregar cuenta" icon="pi pi-plus" [rounded]="true" (onClick)="openTransferDialog()" />
+        </div>
+        @if (guestTransfers().length === 0) {
+          <app-empty-state icon="pi pi-wallet" title="Todavía no hay cuentas" text="Agregá una cuenta si querés que puedan transferirte en lugar de elegir un regalo." />
+        } @else {
+          <div class="mt-14 grid grid-cols-1 gap-3 md:grid-cols-2">
+            @for (account of guestTransfers(); track $index) {
+              <article class="tone-card card card-glass flex items-start justify-between gap-3 p-4">
+                <div class="transfer-card-body min-w-0 flex-1">
+                  <div class="card-title-row">
+                    <h3 class="font-serif text-2xl">{{ account.holder || account.alias || 'Cuenta' }}</h3>
+                  </div>
+                  <div class="card-icon-actions">
+                    <p-button label="Editar" icon="pi pi-pencil" [rounded]="true" styleClass="icon-plain icon-primary" ariaLabel="Editar cuenta" (onClick)="editTransfer($index)" />
+                    <p-button label="Eliminar" icon="pi pi-trash" [rounded]="true" styleClass="icon-plain" ariaLabel="Quitar cuenta" (onClick)="askRemoveTransfer($index)" />
+                  </div>
+                  <div class="store-card-rest mt-3 space-y-2 text-sm">
+                    @if (account.bank) {
+                      <p>
+                        <span class="block text-xs text-muted">Banco</span>
+                        <span>{{ account.bank }}</span>
+                      </p>
+                    }
+                    @if (account.alias) {
+                      <p>
+                        <span class="block text-xs text-muted">Alias</span>
+                        <span>{{ account.alias }}</span>
+                      </p>
+                    }
+                    @if (account.cbu) {
+                      <p>
+                        <span class="block text-xs text-muted">CBU</span>
+                        <span class="break-all">{{ account.cbu }}</span>
+                      </p>
+                    }
+                  </div>
+                </div>
+              </article>
+            }
+          </div>
+        }
+      }
+      }
+
+      @if (activeTab() === 'historial') {
+        @if (!historyReady()) {
+          <div class="mt-8 flex flex-col gap-3" aria-busy="true" aria-label="Cargando movimientos">
+            @for (item of [1, 2, 3, 4]; track item) {
+              <div class="card flex items-center gap-4 px-5 py-4">
+                <div class="size-10 shrink-0 animate-pulse rounded-full bg-sand"></div>
+                <div class="flex min-w-0 flex-1 flex-col gap-2">
+                  <div class="h-4 w-40 animate-pulse rounded-full bg-sand"></div>
+                  <div class="h-3 w-64 max-w-full animate-pulse rounded-full bg-sand"></div>
+                </div>
+                <div class="hidden h-6 w-24 animate-pulse rounded-full bg-sand sm:block"></div>
+              </div>
+            }
+          </div>
+        } @else if (historyRows().length === 0) {
+          <app-empty-state icon="pi pi-history" title="Todavía no hay movimientos" text="Cuando reserven un regalo o avisen de un local o una transferencia, va a quedar acá." />
+        } @else {
+          <div class="history-filters mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+            <label class="block w-full sm:w-56">
+              <span class="label">Lista</span>
+              <p-select
+                styleClass="history-filter"
+                size="small"
+                [options]="historyListOptions()"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="historyList()"
+                (onChange)="setHistoryList($event)"
+                appendTo="body"
+                ariaLabel="Filtrar por lista"
+              />
+            </label>
+            <label class="block w-full sm:w-56">
+              <span class="label">Buscar</span>
+              <input
+                class="history-filter"
+                [ngModel]="historyGift()"
+                (ngModelChange)="historyGift.set($event)"
+                aria-label="Buscar en el historial"
+              />
+            </label>
+            <label class="block w-full sm:w-56">
+              <span class="label">Tipo</span>
+              <p-select
+                styleClass="history-filter"
+                size="small"
+                [options]="historyKinds"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="historyKind()"
+                (onChange)="setHistoryKind($event)"
+                appendTo="body"
+                ariaLabel="Filtrar por tipo"
+              >
+                <ng-template pTemplate="item" let-option>
+                  <span class="inline-flex items-center gap-2">
+                    @if (option.value) {
+                      <i [class]="historyKindIcon(option.value)" aria-hidden="true"></i>
+                    }
+                    {{ option.label }}
+                  </span>
+                </ng-template>
+                <ng-template pTemplate="selectedItem" let-option>
+                  <span class="inline-flex items-center gap-2">
+                    @if (option.value) {
+                      <i [class]="historyKindIcon(option.value)" aria-hidden="true"></i>
+                    }
+                    {{ option.label }}
+                  </span>
+                </ng-template>
+              </p-select>
+            </label>
+            <label class="block w-full sm:w-56">
+              <span class="label">Estado</span>
+              <p-select
+                styleClass="history-filter"
+                size="small"
+                [options]="historyStatuses"
+                optionLabel="label"
+                optionValue="value"
+                [ngModel]="historyStatus()"
+                (onChange)="setHistoryStatus($event)"
+                appendTo="body"
+                ariaLabel="Filtrar por estado"
+              >
+                <ng-template pTemplate="item" let-option>
+                  @if (option.value) {
+                    <app-status-badge [status]="option.value" />
+                  } @else {
+                    <span>Todos los estados</span>
+                  }
+                </ng-template>
+                <ng-template pTemplate="selectedItem" let-option>
+                  @if (option.value) {
+                    <app-status-badge [status]="option.value" />
+                  } @else {
+                    <span>Todos los estados</span>
+                  }
+                </ng-template>
+              </p-select>
+            </label>
+          </div>
+          @if (visibleEvents().length === 0) {
+            <app-empty-state icon="pi pi-filter" title="No hay movimientos con esos filtros" text="Probá con otra búsqueda, otro tipo o todos los estados." />
+          } @else {
+            <div class="card mt-4 overflow-hidden">
+              <table class="hidden w-full text-left text-sm md:table">
+                <thead class="bg-[#f8f9fa] font-sans text-[#6b7385]">
+                  <tr>
+                    <th class="px-5 py-4 font-medium">Fecha</th>
+                    <th class="px-5 py-4 font-medium">Lista</th>
+                    <th class="px-5 py-4 font-medium">Tipo</th>
+                    <th class="px-5 py-4 font-medium">Nombre</th>
+                    <th class="px-5 py-4 font-medium">Antes</th>
+                    <th class="px-5 py-4 font-medium">Ahora</th>
+                    <th class="px-5 py-4 font-medium">Qué pasó</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (event of visibleEvents(); track event.id) {
+                    <tr class="border-t border-[#eef0f3]">
+                      <td class="px-5 py-4 text-ink/70">{{ formatDateTime(event.createdAt) }}</td>
+                      <td class="px-5 py-4">{{ event.listTitle }}</td>
+                      <td class="px-5 py-4">
+                        <span class="inline-flex items-center gap-2">
+                          <i [class]="historyKindIcon(event.kind)" aria-hidden="true"></i>
+                          {{ historyKindLabel(event.kind) }}
+                        </span>
+                      </td>
+                      <td class="px-5 py-4 font-medium">{{ event.name }}</td>
+                      <td class="px-5 py-4">
+                        @if (event.fromStatus) {
+                          <app-status-badge [status]="event.fromStatus" />
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                      <td class="px-5 py-4">
+                        @if (event.toStatus) {
+                          <app-status-badge [status]="event.toStatus" />
+                        } @else {
+                          <span class="text-muted">—</span>
+                        }
+                      </td>
+                      <td class="px-5 py-4 text-ink/75">{{ event.detail }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+              <div class="divide-y divide-[#eef0f3] md:hidden">
+                @for (event of visibleEvents(); track event.id) {
+                  <article class="px-5 py-4">
+                    <p class="inline-flex items-center gap-2 text-xs uppercase tracking-[0.14em] text-muted">
+                      <i [class]="historyKindIcon(event.kind)" aria-hidden="true"></i>
+                      {{ historyKindLabel(event.kind) }}
+                    </p>
+                    <h3 class="mt-1 font-serif text-2xl">{{ event.name }}</h3>
+                    <p class="mt-1 text-sm text-ink/70">{{ event.listTitle }}</p>
+                    <p class="mt-1 text-sm text-ink/70">{{ formatDateTime(event.createdAt) }}</p>
+                    <div class="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                      @if (event.fromStatus) {
+                        <app-status-badge [status]="event.fromStatus" />
+                      }
+                      @if (event.fromStatus && event.toStatus) {
+                        <span class="text-muted">→</span>
+                      }
+                      @if (event.toStatus) {
+                        <app-status-badge [status]="event.toStatus" />
+                      }
+                    </div>
+                    <p class="mt-2 text-sm leading-6 text-ink/75">{{ event.detail }}</p>
+                  </article>
+                }
+              </div>
+            </div>
+          }
+        }
+      }
+
+      <p-dialog
+        header="Compartir lista"
+        [modal]="true"
+        [draggable]="false"
+        [visible]="shareOpen()"
+        (visibleChange)="shareOpen.set($event)"
+        [style]="{ width: 'min(28rem, 92vw)' }"
+      >
+        <p class="break-all text-sm text-muted">{{ shareUrl() }}</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <p-button label="Copiar enlace" icon="pi pi-link" [rounded]="true" (onClick)="copyLink()" />
+          <p-button label="Ver lista pública" icon="pi pi-external-link" [rounded]="true" (onClick)="openPublic()" />
+        </div>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <p-button label="WhatsApp" icon="pi pi-whatsapp" [rounded]="true" severity="secondary" (onClick)="shareWhatsapp()" />
+          <p-button label="Instagram" icon="pi pi-instagram" [rounded]="true" severity="secondary" (onClick)="shareInstagram()" />
+          <p-button label="Facebook" icon="pi pi-facebook" [rounded]="true" severity="secondary" (onClick)="shareFacebook()" />
+        </div>
+      </p-dialog>
+    }
+
+    @if (selected() && giftDialog(); as mode) {
+      <p-dialog
+        [header]="mode.id ? 'Editar regalo' : 'Nuevo regalo'"
+        [modal]="true"
+        [draggable]="false"
+        [visible]="giftDialogVisible()"
+        (visibleChange)="onGiftVisible($event)"
+        (onHide)="onGiftDialogHide()"
+        [style]="{ width: 'min(46rem, 94vw)' }"
+      >
+        <app-gift-editor [modal]="true" [giftId]="mode.id" (saved)="onGiftSaved()" (dismissed)="giftDialogVisible.set(false)" />
+      </p-dialog>
+    }
+
+    <p-dialog
+      [header]="creatingList() ? 'Nueva lista' : 'Editar lista'"
+      [modal]="true"
+      [draggable]="false"
+      [visible]="listDialogOpen()"
+      (visibleChange)="onListDialog($event)"
+      (onHide)="onListDialogHide()"
+      [style]="{ width: 'min(44rem, 94vw)' }"
+    >
+      <form class="dialog-form grid sm:grid-cols-2" [formGroup]="listForm" (ngSubmit)="saveList()">
+        <p class="dialog-form-note sm:col-span-2">El link público va a ser {{ origin }}/{{ listForm.controls.slug.value || 'tulink' }}</p>
+        <label class="block">
+          <span class="label">Tu nombre</span>
+          <input class="field" formControlName="ownerName" />
+          @if (listForm.controls.ownerName.touched && listForm.controls.ownerName.invalid) {
+            <span class="field-error">Ingresá tu nombre.</span>
+          }
+        </label>
+        <label class="block">
+          <span class="label">Fecha del evento</span>
+          <input class="field" type="date" formControlName="eventDate" />
+          @if (listForm.controls.eventDate.touched && listForm.controls.eventDate.invalid) {
+            <span class="field-error">Ingresá la fecha del evento.</span>
+          }
+        </label>
+        <label class="block">
+          <span class="label">Título</span>
+          <input class="field" formControlName="title" (input)="onTitleInput()" />
+          @if (listForm.controls.title.touched && listForm.controls.title.invalid) {
+            <span class="field-error">Ingresá el título.</span>
+          }
+        </label>
+        <label class="block">
+          <span class="label">Link (como se va a ver tu url)</span>
+          <input class="field" formControlName="slug" (input)="slugTouched.set(true)" />
+          @if (listForm.controls.slug.touched && listForm.controls.slug.invalid) {
+            <span class="field-error">Ingresá el link.</span>
+          }
+        </label>
+        <label class="block">
+          <span class="label">Mensaje</span>
+          <textarea class="field" formControlName="description" placeholder="Si querés hacerme un regalo..."></textarea>
+        </label>
+        @if (uploadingCover()) {
+          <div class="image-picker" aria-busy="true">
+            <i class="pi pi-spinner pi-spin" aria-hidden="true"></i>
+            <span>Subiendo imagen…</span>
+          </div>
+        } @else if (listForm.controls.coverImage.value) {
+          <div class="image-preview">
+            <app-loading-image [src]="listForm.controls.coverImage.value" alt="Foto de portada" [removable]="true" (removed)="clearCover()" />
+          </div>
+        } @else {
+          <label class="image-picker">
+            <input type="file" accept="image/*" (change)="onCoverSelected($event)" />
+            <i class="pi pi-cloud-upload" aria-hidden="true"></i>
+            <span>Subir foto de portada</span>
+            <span class="image-picker-hint">Tocá para elegir una imagen, o pegala</span>
+          </label>
+        }
+        <div class="flex flex-wrap gap-2 sm:col-span-2">
+          <p-button type="submit" label="Guardar lista" icon="pi pi-check" [rounded]="true" [disabled]="savingList()" />
+          <p-button type="button" label="Cancelar" icon="pi pi-times" [rounded]="true" severity="secondary" (onClick)="cancelForm()" />
+        </div>
+      </form>
+    </p-dialog>
+
+    <p-dialog
+      [header]="editingStore() === null ? 'Agregar local' : 'Editar local'"
+      [modal]="true"
+      [draggable]="false"
+      [visible]="storeDialog()"
+      (visibleChange)="onStoreDialog($event)"
+      (onHide)="onStoreDialogHide()"
+      [style]="{ width: 'min(42rem, 94vw)' }"
+    >
+      <form class="dialog-form grid sm:grid-cols-2" [formGroup]="storeForm" (ngSubmit)="confirmStore()">
+        <label class="block">
+          <span class="label">Nombre del local</span>
+          <input class="field" formControlName="name" />
+          @if (storeForm.controls.name.touched && storeForm.controls.name.invalid) {
+            <span class="field-error">Ingresá el nombre del local.</span>
+          }
+        </label>
+        <label class="block">
+          <span class="label">A nombre de</span>
+          <input class="field" formControlName="underName" />
+        </label>
+        <label class="block sm:col-span-2">
+          <span class="label">Dirección</span>
+          <input class="field" formControlName="address" />
+          @if (storeForm.controls.address.touched && storeForm.controls.address.invalid) {
+            <span class="field-error">Ingresá la dirección del local.</span>
+          }
+        </label>
+        <label class="block">
+          <span class="label">Ubicación en el mapa</span>
+          <input class="field" formControlName="mapUrl" inputmode="url" placeholder="Link de Google Maps" />
+          @if (storeForm.controls.mapUrl.touched && storeForm.controls.mapUrl.hasError('required')) {
+            <span class="field-error">Ingresá la ubicación en el mapa.</span>
+          } @else if (storeForm.controls.mapUrl.touched && storeForm.controls.mapUrl.invalid) {
+            <span class="field-error">El link tiene que ser una dirección web.</span>
+          }
+        </label>
+        <label class="block">
+          <span class="label">Link de local</span>
+          <input class="field" formControlName="socialUrl" inputmode="url" placeholder="https://" />
+          @if (storeForm.controls.socialUrl.touched && storeForm.controls.socialUrl.invalid) {
+            <span class="field-error">El link tiene que ser una dirección web.</span>
+          }
+        </label>
+        <label class="block sm:col-span-2">
+          <span class="label">Nota para el invitado</span>
+          <textarea class="field" formControlName="note" maxlength="80"></textarea>
+          @if (storeForm.controls.note.touched && storeForm.controls.note.invalid) {
+            <span class="field-error">La nota puede tener hasta 80 caracteres.</span>
+          }
+        </label>
+        <div class="flex flex-wrap gap-2 sm:col-span-2">
+          <p-button type="submit" label="Guardar" icon="pi pi-check" [rounded]="true" [disabled]="savingList()" />
+          <p-button type="button" label="Cancelar" icon="pi pi-times" [rounded]="true" severity="secondary" [disabled]="savingList()" (onClick)="storeDialog.set(false)" />
+        </div>
+      </form>
+    </p-dialog>
+
+    <p-dialog
+      [header]="editingTransfer() === null ? 'Agregar cuenta' : 'Editar cuenta'"
+      [modal]="true"
+      [draggable]="false"
+      [visible]="transferDialog()"
+      (visibleChange)="onTransferDialog($event)"
+      (onHide)="onTransferDialogHide()"
+      [style]="{ width: 'min(40rem, 94vw)' }"
+    >
+      <form class="dialog-form grid sm:grid-cols-2" [formGroup]="transferForm" (ngSubmit)="confirmTransfer()">
+        <label class="block"><span class="label">Titular</span><input class="field" formControlName="holder" /></label>
+        <label class="block"><span class="label">Banco/Billetera Virtual</span><input class="field" formControlName="bank" /></label>
+        <label class="block"><span class="label">Alias</span><input class="field" formControlName="alias" /></label>
+        <label class="block"><span class="label">CBU</span><input class="field" formControlName="cbu" /></label>
+        @if (transferError()) {
+          <p class="field-error sm:col-span-2">{{ transferError() }}</p>
+        }
+        <div class="flex flex-wrap gap-2 sm:col-span-2">
+          <p-button type="submit" label="Guardar" icon="pi pi-check" [rounded]="true" [disabled]="savingList()" />
+          <p-button type="button" label="Cancelar" icon="pi pi-times" [rounded]="true" severity="secondary" [disabled]="savingList()" (onClick)="transferDialog.set(false)" />
+        </div>
+      </form>
+    </p-dialog>
+  }
+</section>
+
+@if (suggestionGift(); as gift) {
+  <p-dialog
+    [header]="gift.name"
+    [modal]="true"
+    [draggable]="false"
+    [visible]="suggestionVisible()"
+    (visibleChange)="onSuggestionVisible($event)"
+    (onHide)="onSuggestionHide()"
+    [style]="{ width: 'min(28rem, 92vw)' }"
+  >
+    <div class="space-y-3">
+      @for (suggestion of pendingFor(gift.id); track suggestion.id) {
+        <div class="rounded-2xl bg-cream px-3 py-3 text-sm">
+          <p class="font-semibold">{{ suggestion.guestName }} sugirió otra versión</p>
+          <p class="mt-1">{{ suggestion.name }}</p>
+          @if (suggestion.note) {
+            <p class="mt-1 text-ink/70">{{ suggestion.note }}</p>
+          }
+          @if (suggestion.url) {
+            <a class="mt-1 inline-block text-ink underline" [href]="suggestion.url" target="_blank" rel="noopener">Ver producto</a>
+          }
+          <div class="mt-3 flex flex-wrap gap-2">
+            <p-button label="Aceptar" icon="pi pi-check" [rounded]="true" (onClick)="decideSuggestion(suggestion, true)" />
+            <p-button label="Rechazar" icon="pi pi-times" [rounded]="true" severity="secondary" (onClick)="decideSuggestion(suggestion, false)" />
+          </div>
+        </div>
+      }
+    </div>
+  </p-dialog>
+}
+
+@if (reservationGift(); as gift) {
+  <p-dialog
+    [header]="gift.name"
+    [modal]="true"
+    [draggable]="false"
+    [visible]="true"
+    (visibleChange)="reservationGift.set($event ? gift : null)"
+    [style]="{ width: 'min(28rem, 92vw)' }"
+  >
+    @if (activeReservation(gift.id); as person) {
+      <dl class="space-y-3 text-sm leading-6">
+        <div><dt class="text-muted">Persona</dt><dd class="font-medium">{{ person.name }}</dd></div>
+        <div><dt class="text-muted">Teléfono</dt><dd>{{ person.phone }}</dd></div>
+        <div><dt class="text-muted">Email</dt><dd>{{ person.email || '—' }}</dd></div>
+        <div><dt class="text-muted">Mensaje</dt><dd>{{ person.message || '—' }}</dd></div>
+        <div><dt class="text-muted">Fecha de la reserva</dt><dd>{{ formatDateTime(person.createdAt) }}</dd></div>
+        <div><dt class="text-muted">Estado</dt><dd>{{ person.status === 'ACTIVE' ? 'Activa' : 'Cancelada' }}</dd></div>
+      </dl>
+      <div class="mt-6">
+        <p-button label="Editar datos" icon="pi pi-pencil" [rounded]="true" styleClass="icon-plain icon-primary" (onClick)="openReserveForm(gift)" />
+      </div>
+    } @else {
+      <p class="text-sm text-ink/70">No hay datos de quién reservó este regalo.</p>
+      <button type="button" class="btn-primary mt-5" (click)="openReserveForm(gift)">Completar datos</button>
+    }
+  </p-dialog>
+}
+
+@if (reserveDraft(); as gift) {
+  <p-dialog
+    header="Quién lo reservó"
+    [modal]="true"
+    [draggable]="false"
+    [visible]="reserveVisible()"
+    (visibleChange)="onReserveVisible($event)"
+    (onHide)="onReserveDialogHide()"
+    [style]="{ width: 'min(40rem, 94vw)' }"
+  >
+    <p class="dialog-form-note">{{ gift.name }}</p>
+    <form class="dialog-form mt-3 grid sm:grid-cols-2" [formGroup]="reserveForm" (ngSubmit)="confirmOwnerReserve()">
+      <label class="block">
+        <span class="label">Nombre y apellido</span>
+        <input class="field" formControlName="name" autocomplete="name" />
+      </label>
+      <label class="block">
+        <span class="label">Teléfono</span>
+        <input class="field" formControlName="phone" autocomplete="tel" inputmode="tel" />
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="label">Email</span>
+        <input class="field" type="email" formControlName="email" autocomplete="email" />
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="label">Mensaje</span>
+        <textarea class="field resize-none" formControlName="message"></textarea>
+      </label>
+      @if (reserveError()) {
+        <p class="field-error sm:col-span-2">{{ reserveError() }}</p>
+      }
+      <div class="flex flex-wrap gap-2 sm:col-span-2">
+        <p-button type="submit" label="Guardar" icon="pi pi-check" [rounded]="true" [disabled]="reserveSaving()" />
+        <p-button type="button" label="Cancelar" icon="pi pi-times" [rounded]="true" severity="secondary" [disabled]="reserveSaving()" (onClick)="reserveVisible.set(false)" />
+      </div>
+    </form>
+  </p-dialog>
+}
+
+@if (pendingDelete(); as gift) {
+  <app-confirm-dialog
+    title="Eliminar regalo"
+    [message]="'¿Eliminar ' + gift.name + '? Esta acción no se puede deshacer.'"
+    confirmLabel="Eliminar"
+    (closed)="confirmDelete($event)"
+  />
+}
+@if (pendingRemoval(); as removal) {
+  <app-confirm-dialog
+    [title]="removalTitle()"
+    [message]="removalMessage()"
+    confirmLabel="Eliminar"
+    (closed)="confirmRemoval($event)"
+  />
+}

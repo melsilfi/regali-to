@@ -1,0 +1,53 @@
+<div class="fixed inset-0 z-40 grid place-items-end bg-ink/40 p-0 sm:place-items-center sm:p-6" (click)="close()">
+  <section
+    class="card guest-dialog max-h-[92dvh] w-full overflow-auto rounded-b-none p-4 sm:max-w-2xl sm:rounded-3xl sm:p-5"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="suggest-title"
+    (click)="$event.stopPropagation()"
+  >
+    <p class="dialog-form-note">Otra versión</p>
+    <h2 id="suggest-title" class="mt-1 font-serif text-2xl">{{ gift().name }}</h2>
+    <p class="mt-1 text-sm leading-5 text-ink/70">
+      Si encontraste una opción que te parece mejor, proponela. Quien armó la lista decide si la cambia.
+    </p>
+    <form class="dialog-form mt-3 grid sm:grid-cols-2" [formGroup]="form" (ngSubmit)="submit()">
+      <label class="block">
+        <span class="label">Tu nombre</span>
+        <input class="field" formControlName="guestName" autocomplete="name" />
+        @if (form.controls.guestName.touched && form.controls.guestName.invalid) {
+          <span class="field-error">Ingresá tu nombre.</span>
+        }
+      </label>
+      <label class="block">
+        <span class="label">Tu email</span>
+        <input class="field" formControlName="guestEmail" type="email" autocomplete="email" />
+        @if (form.controls.guestEmail.touched && form.controls.guestEmail.invalid) {
+          <span class="field-error">Ingresá un email para avisarte si aceptan la sugerencia.</span>
+        }
+      </label>
+      <label class="block">
+        <span class="label">Nombre de la versión</span>
+        <input class="field" formControlName="name" />
+        @if (form.controls.name.touched && form.controls.name.invalid) {
+          <span class="field-error">Contanos cómo se llama.</span>
+        }
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="label">Link</span>
+        <input class="field" formControlName="url" placeholder="https://" />
+      </label>
+      <label class="block sm:col-span-2">
+        <span class="label">Por qué te parece mejor</span>
+        <textarea class="field resize-none" formControlName="note"></textarea>
+      </label>
+      @if (formError() || error()) {
+        <p class="field-error sm:col-span-2">{{ formError() || error() }}</p>
+      }
+      <div class="flex flex-wrap gap-2 sm:col-span-2">
+        <p-button type="submit" label="Enviar sugerencia" icon="pi pi-send" [rounded]="true" [disabled]="submitting() || example()" />
+        <p-button type="button" label="Cancelar" icon="pi pi-times" [rounded]="true" severity="secondary" [disabled]="submitting()" (onClick)="close()" />
+      </div>
+    </form>
+  </section>
+</div>

@@ -1,0 +1,50 @@
+<section class="mx-auto grid max-w-6xl gap-12 px-5 py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:py-24">
+  <div>
+    <p class="text-xs uppercase tracking-[0.22em] text-muted">Una lista, un solo regalo por persona</p>
+    <h1 class="mt-4 max-w-xl font-serif text-5xl leading-[1.05] sm:text-7xl">Deciles qué te haría feliz recibir.</h1>
+    <p class="mt-6 max-w-lg text-lg leading-8 text-ink/75">
+      Armás tu lista, compartís un link y cada invitado reserva un regalo. Nadie se anota dos veces en el mismo.
+    </p>
+    <div class="mt-8 flex flex-col gap-3 sm:flex-row">
+      @if (loggedIn()) {
+        <button type="button" class="btn-primary" (click)="openFirstList()">Ir a mi lista</button>
+      } @else {
+        <a routerLink="/registro" class="btn-primary">Crear cuenta</a>
+        <a routerLink="/lauraynicoweddinglist" class="btn-secondary">Ver un ejemplo</a>
+      }
+    </div>
+  </div>
+  <aside class="card overflow-hidden">
+    <img
+      src="https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&w=1400&q=80"
+      alt="Mesa de una celebración"
+      class="h-56 w-full object-cover"
+    />
+    <div class="p-6">
+      <p class="text-xs uppercase tracking-[0.16em] text-muted">regali.to/lauraynicoweddinglist</p>
+      <h2 class="mt-2 font-serif text-3xl">Lista de regalos de Laura y Nico</h2>
+      <p class="mt-3 text-sm leading-6 text-ink/70">8 regalos · 5 disponibles · 2 reservados</p>
+    </div>
+  </aside>
+</section>
+
+<section class="mx-auto grid max-w-6xl gap-4 px-5 pb-20 sm:grid-cols-3">
+  @for (step of [
+    { n: '01', icon: 'pi pi-user', t: 'Creás tu cuenta', d: 'Después armás la lista y elegís el link: lauraynicoweddinglist.' },
+    { n: '02', icon: 'pi pi-gift', t: 'Sumás regalos', d: 'Una foto, una idea, un precio aproximado. Nada tiene que parecer una tienda.' },
+    { n: '03', icon: 'pi pi-share-alt', t: 'Compartís el link', d: 'Tus invitados reservan con nombre y teléfono, sin crear una cuenta.' }
+  ]; track step.n) {
+    <article class="card card-glass p-6">
+      <p class="text-center text-xs tracking-[0.18em] text-gold">{{ step.n }}</p>
+      <div class="mt-4 flex items-center gap-4">
+        <span class="grid size-11 shrink-0 place-items-center rounded-full bg-white text-lg text-[#1e3358] shadow-[0_4px_12px_rgba(0,0,0,0.08)]">
+          <i [class]="step.icon" aria-hidden="true"></i>
+        </span>
+        <div class="min-w-0">
+          <h2 class="font-serif text-2xl">{{ step.t }}</h2>
+          <p class="mt-1 text-sm leading-6 text-ink/70">{{ step.d }}</p>
+        </div>
+      </div>
+    </article>
+  }
+</section>

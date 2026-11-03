@@ -1,0 +1,41 @@
+<div class="notification-bell">
+  <button type="button" class="side-nav-action" [class.is-active]="active()" aria-label="Notificaciones" (click)="open($event)">
+    <span class="notification-bell-icon">
+      <i class="pi pi-bell" aria-hidden="true"></i>
+      @if (center.unread() > 0) {
+        <span class="notification-bell-count">{{ center.unread() > 9 ? '9+' : center.unread() }}</span>
+      }
+    </span>
+    <span class="side-nav-label">Notif.</span>
+  </button>
+  <p-popover #panel appendTo="body" styleClass="notification-panel" (onShow)="center.markSeen()">
+    <div class="w-80 max-w-[80vw]">
+      <p class="font-serif text-2xl">Notificaciones</p>
+      <div class="mt-2 max-h-96 overflow-y-auto">
+        @for (item of center.items(); track item.id) {
+          <article
+            class="flex gap-3 border-b border-line py-3 text-left last:border-0"
+            [class.cursor-pointer]="!!item.focus"
+            [class.hover:bg-cream]="!!item.focus"
+            [attr.role]="item.focus ? 'button' : null"
+            [attr.tabindex]="item.focus ? 0 : null"
+            (click)="openFocus(item)"
+            (keydown.enter)="openFocus(item)"
+          >
+            <span class="grid size-9 shrink-0 place-items-center rounded-full" [class]="item.bubble + ' grid size-9 shrink-0 place-items-center rounded-full'">
+              <i [class]="item.icon"></i>
+            </span>
+            <div class="min-w-0">
+              <p class="font-medium">{{ item.title }}</p>
+              <p class="text-sm leading-5 text-ink/70">{{ item.detail }}</p>
+              <p class="mt-1 text-xs text-muted">{{ center.formatDateTime(item.createdAt) }}</p>
+            </div>
+          </article>
+        } @empty {
+          <p class="py-6 text-sm text-muted">Cuando alguien reserve un regalo, sugiera otra versión, compre en un local o avise una transferencia, va a aparecer acá.</p>
+        }
+      </div>
+      <a routerLink="/panel/reservas" class="btn-secondary mt-3" (click)="close()">Ver reservas</a>
+    </div>
+  </p-popover>
+</div>

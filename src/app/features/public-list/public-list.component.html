@@ -1,0 +1,156 @@
+@if (loading()) {
+  <div class="px-3 py-4 sm:px-6 sm:py-6" aria-busy="true" aria-label="Cargando lista">
+    <div class="mb-4 h-4 w-28 animate-pulse rounded-full bg-sand"></div>
+    <header class="list-hero card">
+      <div class="list-hero-top">
+        <div class="list-hero-photo animate-pulse bg-sand"></div>
+        <div class="list-hero-body">
+          <div class="flex w-full flex-col items-center gap-2">
+            <div class="h-3 w-24 animate-pulse rounded-full bg-sand"></div>
+            <div class="h-8 w-64 max-w-full animate-pulse rounded-full bg-sand"></div>
+            <div class="h-4 w-80 max-w-full animate-pulse rounded-full bg-sand"></div>
+            <div class="h-3 w-40 animate-pulse rounded-full bg-sand"></div>
+          </div>
+        </div>
+      </div>
+    </header>
+    <div class="list-nav panel-tabs" aria-hidden="true">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="h-9 w-24 animate-pulse rounded-full bg-sand"></div>
+      }
+    </div>
+    <section class="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      @for (item of [1, 2, 3, 4]; track item) {
+        <div class="gift-skeleton card" aria-hidden="true">
+          <div class="gift-skeleton-photo animate-pulse"></div>
+          <div class="gift-skeleton-title animate-pulse"></div>
+          <div class="gift-skeleton-status animate-pulse"></div>
+          <div class="gift-skeleton-price animate-pulse"></div>
+          <div class="gift-skeleton-line animate-pulse"></div>
+          <div class="gift-skeleton-btn animate-pulse"></div>
+        </div>
+      }
+    </section>
+  </div>
+} @else if (error()) {
+  <div class="mx-auto grid min-h-[70dvh] max-w-lg place-items-center px-5 text-center">
+    <div>
+      <h1 class="font-serif text-4xl">No pudimos abrir la lista</h1>
+      <p class="mt-3 text-ink/70">{{ error() }}</p>
+    </div>
+  </div>
+} @else if (missing()) {
+  <div class="mx-auto grid min-h-[70dvh] max-w-lg place-items-center px-5 text-center">
+    <div>
+      <p class="text-xs uppercase tracking-[0.18em] text-muted">Lista</p>
+      <h1 class="mt-3 font-serif text-4xl">Este link no tiene una lista</h1>
+      <p class="mt-3 text-ink/70">Pedile a quien te invitó que te lo vuelva a compartir.</p>
+    </div>
+  </div>
+} @else if (list()) {
+  @if (list(); as current) {
+  <article class="px-3 py-4 sm:px-6 sm:py-6">
+    @if (current.slug === exampleSlug) {
+      <a routerLink="/" class="mb-4 block text-sm text-muted">Volver al inicio</a>
+    }
+    @if (isOwner()) {
+      <a routerLink="/panel" class="mb-4 block text-sm text-muted" (click)="backToList()">Volver</a>
+    }
+    <header class="list-hero card">
+      <div class="list-hero-blur" [style.--cover]="'url(' + (current.coverImage || '/ejemplos/regalo.jpg') + ')'"></div>
+      <div class="list-hero-fade" aria-hidden="true"></div>
+      <div class="list-hero-top">
+        <div class="list-hero-photo">
+          <img [src]="current.coverImage || '/ejemplos/regalo.jpg'" [alt]="current.title" />
+        </div>
+        <div class="list-hero-body">
+          <div class="list-hero-copy">
+            <p class="list-hero-kicker">{{ current.slug === exampleSlug ? 'Lista de ejemplo' : current.ownerName }}</p>
+            <h1 class="list-hero-title font-serif">{{ current.title }}</h1>
+            @if (current.description) {
+              <p class="list-hero-desc">{{ current.description }}</p>
+            }
+            @if (current.eventDate) {
+              <p class="list-hero-date">
+                <i class="pi pi-calendar" aria-hidden="true"></i>
+                {{ formatDate(current.eventDate) }}
+              </p>
+            }
+            <p class="list-hero-link">
+              {{ counts().total }} regalos · {{ counts().available }} disponibles · {{ counts().reserved }} reservados
+              @if (counts().received) {
+                · {{ counts().received }} recibidos
+              }
+            </p>
+          </div>
+        </div>
+      </div>
+    </header>
+    <div class="list-nav panel-tabs" role="tablist" aria-label="Qué ver de la lista">
+      @for (option of viewFilters(); track option.id) {
+        <button
+          type="button"
+          class="panel-tab"
+          role="tab"
+          [class.is-active]="filter() === option.id"
+          [attr.aria-selected]="filter() === option.id"
+          (click)="filter.set(option.id)"
+        >
+          @if (option.icon) {
+            <i [class]="option.icon" aria-hidden="true"></i>
+          }
+          {{ option.label }}
+        </button>
+      }
+    </div>
+
+    @if (filter() === 'stores') {
+      <app-guest-options class="block py-4" [options]="current.guestOptions" [listId]="current.id" section="stores" [example]="current.slug === exampleSlug" />
+    } @else if (filter() === 'transfers') {
+      <app-guest-options class="block py-4" [options]="current.guestOptions" [listId]="current.id" section="transfers" [example]="current.slug === exampleSlug" />
+    } @else if (giftsLoading()) {
+      <section class="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Cargando regalos">
+        @for (item of [1, 2, 3, 4]; track item) {
+          <div class="gift-skeleton card" aria-hidden="true">
+            <div class="gift-skeleton-photo animate-pulse"></div>
+            <div class="gift-skeleton-title animate-pulse"></div>
+            <div class="gift-skeleton-status animate-pulse"></div>
+            <div class="gift-skeleton-price animate-pulse"></div>
+            <div class="gift-skeleton-line animate-pulse"></div>
+            <div class="gift-skeleton-btn animate-pulse"></div>
+          </div>
+        }
+      </section>
+    } @else if (visibleGifts().length === 0) {
+      <p class="py-8 text-center text-ink/60">No hay regalos en esta vista.</p>
+    } @else {
+      <section class="mt-4 grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        @for (gift of visibleGifts(); track gift.id) {
+          <app-gift-card [gift]="gift" (reserve)="openReserve($event)" (suggest)="openSuggest($event)" />
+        }
+      </section>
+    }
+  </article>
+
+  @if (selected(); as gift) {
+    <app-reserve-dialog
+      [gift]="gift"
+      [example]="list()?.slug === exampleSlug"
+      [submitting]="submitting()"
+      [error]="reserveError()"
+      (confirmed)="confirm($event)"
+      (dismissed)="closeReserve()"
+    />
+  }
+  @if (suggesting(); as gift) {
+    <app-suggest-dialog
+      [gift]="gift"
+      [example]="list()?.slug === exampleSlug"
+      [submitting]="suggestingSubmit()"
+      [error]="suggestError()"
+      (confirmed)="sendSuggestion($event)"
+      (dismissed)="suggesting.set(null)"
+    />
+  }
+  }
+}

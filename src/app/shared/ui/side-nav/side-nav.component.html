@@ -1,0 +1,58 @@
+<button type="button" class="side-nav-backdrop" aria-label="Cerrar menú" (click)="toggle()"></button>
+<div class="side-nav-panel">
+<div class="side-nav-top">
+  <a routerLink="/" class="side-nav-logo">
+    <img [src]="collapsed() ? '/logo-gift.png' : '/logo.png'" alt="regali.to" />
+  </a>
+  <button
+    type="button"
+    class="side-nav-toggle"
+    [attr.aria-label]="collapsed() ? 'Expandir menú' : 'Contraer menú'"
+    (click)="toggle()"
+  >
+    <i [class]="collapsed() ? 'pi pi-chevron-right' : 'pi pi-chevron-left'" aria-hidden="true"></i>
+  </button>
+</div>
+
+<nav class="side-nav-lists" aria-label="Listas">
+  <button type="button" class="side-list side-list-add" title="Nueva Lista" (click)="addList()">
+    <span class="side-add" aria-hidden="true"><i class="pi pi-plus"></i></span>
+    <span class="side-list-name">Nueva Lista</span>
+  </button>
+  @for (item of lists(); track item.id) {
+    <button
+      type="button"
+      class="side-list"
+      [class.side-list-active]="item.id === selectedId()"
+      [attr.aria-current]="item.id === selectedId() ? 'true' : null"
+      [attr.title]="item.title"
+      (click)="pick(item.id)"
+    >
+      <span class="side-list-frame">
+        <span class="side-list-photo">
+          <img [src]="cover(item.coverImage)" alt="" />
+        </span>
+      </span>
+      <span class="side-list-name">{{ item.title }}</span>
+    </button>
+  }
+</nav>
+
+<div class="side-nav-foot">
+  <button
+    type="button"
+    class="side-nav-action side-nav-history"
+    [class.is-active]="historyOpen()"
+    title="Historial"
+    (click)="openHistory()"
+  >
+    <i class="pi pi-history" aria-hidden="true"></i>
+    <span class="side-nav-label">Historial</span>
+  </button>
+  <app-notification-bell [active]="onReservations()" />
+  <button type="button" class="side-nav-action" (click)="logout()">
+    <i class="pi pi-sign-out" aria-hidden="true"></i>
+    <span class="side-nav-label">Salir</span>
+  </button>
+</div>
+</div>
