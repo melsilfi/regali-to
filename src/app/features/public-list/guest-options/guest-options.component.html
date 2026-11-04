@@ -78,20 +78,10 @@
             <div class="flex w-full flex-wrap gap-2 sm:w-auto">
               @if (account.alias || account.cbu) {
                 <div class="copy-menu-wrap">
-                  <button type="button" class="btn-secondary min-w-0 flex-1 sm:flex-none" (click)="toggleCopy(account)">
+                  <button type="button" class="btn-secondary min-w-0 flex-1 sm:flex-none" (click)="toggleCopy(account, $event)">
                     <i class="pi pi-copy" aria-hidden="true"></i>
                     {{ copied() === account.alias || copied() === account.cbu ? 'Copiado' : 'Copiar' }}
                   </button>
-                  @if (copyMenu() === copyKey(account)) {
-                    <div class="copy-menu" role="menu">
-                      @if (account.alias) {
-                        <button type="button" role="menuitem" (click)="copyTransfer(account.alias)">Copiar alias</button>
-                      }
-                      @if (account.cbu) {
-                        <button type="button" role="menuitem" (click)="copyTransfer(account.cbu)">Copiar CBU</button>
-                      }
-                    </div>
-                  }
                 </div>
               }
               <button type="button" class="btn-primary min-w-0 flex-1 sm:flex-none" (click)="openTransfer(account)" [disabled]="example()">
@@ -105,6 +95,23 @@
     </div>
   }
 </section>
+
+@if (openCopy(); as account) {
+  <div
+    class="copy-menu copy-menu-floating"
+    role="menu"
+    [style.top.px]="copyMenuPos().top"
+    [style.left.px]="copyMenuPos().left"
+    [style.width.px]="copyMenuPos().width"
+  >
+    @if (account.alias) {
+      <button type="button" role="menuitem" (click)="copyTransfer(account.alias)">Copiar alias</button>
+    }
+    @if (account.cbu) {
+      <button type="button" role="menuitem" (click)="copyTransfer(account.cbu)">Copiar CBU</button>
+    }
+  </div>
+}
 
 @if (storeOpen(); as store) {
   <div class="fixed inset-0 z-40 grid place-items-end bg-ink/40 p-0 sm:place-items-center sm:p-6" (click)="storeOpen.set(null)">

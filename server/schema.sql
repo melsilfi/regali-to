@@ -130,6 +130,8 @@ create table if not exists notification_outbox (
   created_at timestamptz not null default now()
 );
 
+alter table notification_outbox add column if not exists attempts integer not null default 0;
+
 create index if not exists gifts_list_id_idx on gifts (list_id);
 create index if not exists reservations_gift_id_idx on reservations (gift_id);
 create index if not exists gift_events_gift_id_idx on gift_events (gift_id);

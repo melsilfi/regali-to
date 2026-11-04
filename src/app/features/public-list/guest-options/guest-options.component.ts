@@ -23,6 +23,7 @@ export class GuestOptionsComponent {
   readonly saving = signal(false);
   readonly copied = signal<string | null>(null);
   readonly copyMenu = signal<string | null>(null);
+  readonly copyMenuPos = signal({ top: 0, left: 0, width: 180 });
   readonly storeOpen = signal<GiftStore | null>(null);
   readonly storeSocialHref = storeSocialHref;
   readonly storeMapHref = storeMapHref;
@@ -127,16 +128,42 @@ export class GuestOptionsComponent {
     return `${account.alias}|${account.cbu}`;
   }
 
-  toggleCopy(account: GiftTransfer): void {
+  openCopy(): GiftTransfer | null {
+    const key = this.copyMenu();
+    if (!key) return null;
+    return this.options().transfers.find((account) => this.copyKey(account) === key) ?? null;
+  }
+
+  toggleCopy(account: GiftTransfer, event: Event): void {
     const key = this.copyKey(account);
-    this.copyMenu.set(this.copyMenu() === key ? null : key);
+    if (this.copyMenu() === key) {
+      this.copyMenu.set(null);
+      return;
+    }
+    const button = event.currentTarget;
+    if (button instanceof HTMLElement) {
+      const rect = button.getBoundingClientRect();
+      const width = Math.max(rect.width, 176);
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
+      const height = 96;
+      const below = rect.bottom + 6;
+      const top = below + height > window.innerHeight - 8 ? Math.max(8, rect.top - height - 6) : below;
+      this.copyMenuPos.set({ top, left, width });
+    }
+    this.copyMenu.set(key);
   }
 
   @HostListener('document:click', ['$event'])
   closeCopyMenu(event: MouseEvent): void {
     if (!this.copyMenu()) return;
     const target = event.target;
-    if (target instanceof Element && target.closest('.copy-menu-wrap')) return;
+    if (target instanceof Element && target.closest('.copy-menu-wrap, .copy-menu')) return;
+    this.copyMenu.set(null);
+  }
+
+  @HostListener('window:scroll')
+  @HostListener('window:resize')
+  hideCopyMenu(): void {
     this.copyMenu.set(null);
   }
 

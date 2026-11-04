@@ -143,14 +143,22 @@ app.post('/api/auth/forgot', async (request, response) => {
   const email = `${request.body?.email ?? ''}`.trim().toLowerCase();
   const { rows } = await pool.query('select id, name, email from users where email = $1', [email]);
   const user = rows[0];
-  if (user && process.env.RESEND_API_KEY && process.env.EMAIL_FROM && process.env.SITE_URL) {
+  if (user && env('RESEND_API_KEY') && env('EMAIL_FROM') && env('SITE_URL')) {
     const token = randomBytes(24).toString('hex');
     await pool.query('insert into password_resets (token, user_id, expires_at) values ($1, $2, now() + interval \'2 hours\')', [
       token,
       user.id,
     ]);
-    const link = `${process.env.SITE_URL.replace(/\/$/, '')}/recuperar?token=${token}`;
-    await sendMail(user.email, 'Recuperar tu contraseña', `<p>Hola ${escapeHtml(user.name)},</p><p><a href="${link}">Elegí una contraseña nueva</a>. El enlace vence en 2 horas.</p>`);
+    const link = `${env('SITE_URL').replace(/\/$/, '')}/recuperar?token=${token}`;
+    try {
+      await sendMail(
+        user.email,
+        'Recuperar tu contraseña',
+        `<p>Hola ${escapeHtml(user.name)},</p><p><a href="${link}">Elegí una contraseña nueva</a>. El enlace vence en 2 horas.</p>`,
+      );
+    } catch (error) {
+      console.error('No se pudo enviar el mail para recuperar la contraseña.', error instanceof Error ? error.message : error);
+    }
   }
   response.json({ ok: true });
 });
@@ -493,6 +501,7 @@ app.post('/api/suggestions/:id/decide', async (request, response) => {
       });
     }
     await client.query('commit');
+    void flushOutbox();
     response.json({ ok: true });
   } catch (error) {
     await client.query('rollback');
@@ -626,6 +635,7 @@ async function reserveGift(giftId, body, asOwner) {
     await queueMail(client, gift.owner_email, 'gift_reserved', notice);
     if (email) await queueMail(client, email, 'gift_reserved_guest', notice);
     await client.query('commit');
+    void flushOutbox();
     return { reservationId: inserted.rows[0].id, giftName: gift.name, reservedAt: inserted.rows[0].created_at };
   } catch (error) {
     await client.query('rollback');
@@ -689,47 +699,121 @@ function httpError(status, message) {
   return error;
 }
 
+function env(name) {
+  return `${process.env[name] ?? ''}`.trim().replace(/^['"]|['"]$/g, '');
+}
+
 function escapeHtml(value) {
-  return `${value}`.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return `${value ?? ''}`.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function asNotice(payload) {
+  if (payload && typeof payload === 'object') return payload;
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return {};
+  }
+}
+
+function formatWhen(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('es-AR', { hour12: false });
+}
+
+function formatEventDate(value) {
+  if (!value) return 'Fecha a confirmar';
+  const date = new Date(`${value}`.slice(0, 10) + 'T12:00:00');
+  if (Number.isNaN(date.getTime())) return 'Fecha a confirmar';
+  return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function mailMessage(template, payload) {
+  const notice = asNotice(payload);
+  const site = env('SITE_URL').replace(/\/$/, '');
+  const listUrl = site && notice.listSlug ? `${site}/${notice.listSlug}` : '';
+  const suggestion = template === 'suggestion_accepted' || template === 'suggestion_rejected';
+  const accepted = template === 'suggestion_accepted';
+  const guest = template === 'gift_reserved_guest';
+  const subject = suggestion
+    ? accepted
+      ? `Aceptaron tu sugerencia en ${notice.listTitle}`
+      : `Sobre tu sugerencia en ${notice.listTitle}`
+    : guest
+      ? `Reservaste ${notice.gift}`
+      : `Nuevo regalo reservado: ${notice.gift}`;
+  const html = suggestion
+    ? `<h1>${accepted ? 'Aceptaron tu sugerencia' : 'No van a cambiar el regalo'}</h1>
+       <p>Hola ${escapeHtml(notice.person)}, ${
+         accepted
+           ? `aceptaron tu sugerencia de <strong>${escapeHtml(notice.gift)}</strong> en la lista <strong>${escapeHtml(notice.listTitle)}</strong>. El regalo ya está actualizado.`
+           : `revisaron tu sugerencia de <strong>${escapeHtml(notice.gift)}</strong> en la lista <strong>${escapeHtml(notice.listTitle)}</strong> y van a dejar el regalo como estaba.`
+       }</p>
+       <p>${listUrl ? `<a href="${escapeHtml(listUrl)}">Abrí la lista de nuevo</a>` : 'Volvé a abrir el link de la lista'} para ver cómo quedó.</p>`
+    : guest
+      ? `<h1>Reservaste un regalo</h1>
+         <p>Hola ${escapeHtml(notice.person)}, confirmamos que te comprometiste a comprar <strong>${escapeHtml(notice.gift)}</strong>.</p>
+         <p><strong>Evento:</strong> ${escapeHtml(notice.listTitle)}</p>
+         <p><strong>De:</strong> ${escapeHtml(notice.ownerName || notice.listTitle)}</p>
+         <p><strong>Fecha del evento:</strong> ${escapeHtml(formatEventDate(notice.eventDate))}</p>
+         <p><strong>Reserva:</strong> ${escapeHtml(formatWhen(notice.date))}</p>
+         ${notice.description ? `<p>${escapeHtml(notice.description)}</p>` : ''}
+         <p>Gracias. El regalo quedó reservado a tu nombre para que otra persona no elija el mismo.</p>`
+      : `<h1>Nuevo regalo reservado</h1>
+         <p><strong>Persona:</strong> ${escapeHtml(notice.person)}</p>
+         <p><strong>Teléfono:</strong> ${escapeHtml(notice.phone)}</p>
+         <p><strong>Email:</strong> ${escapeHtml(notice.email || '—')}</p>
+         <p><strong>Regalo:</strong> ${escapeHtml(notice.gift)}</p>
+         <p><strong>Fecha:</strong> ${escapeHtml(formatWhen(notice.date))}</p>
+         <p><strong>Mensaje:</strong> ${escapeHtml(notice.message || '—')}</p>`;
+  return { subject, html };
 }
 
 async function sendMail(to, subject, html) {
   const result = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      Authorization: `Bearer ${env('RESEND_API_KEY')}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: process.env.EMAIL_FROM, to, subject, html }),
+    body: JSON.stringify({ from: env('EMAIL_FROM'), to: [to], subject, html }),
   });
   if (!result.ok) throw new Error(await result.text());
 }
 
 async function flushOutbox() {
-  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) return;
-  const { rows } = await pool.query(`select * from notification_outbox where status = 'pending' order by created_at asc limit 20`);
-  for (const row of rows) {
-    try {
-      const payload = row.payload;
-      const subject = row.template === 'suggestion_accepted'
-        ? `Aceptaron tu sugerencia en ${payload.listTitle}`
-        : row.template === 'suggestion_rejected'
-          ? `Sobre tu sugerencia en ${payload.listTitle}`
-          : row.template === 'gift_reserved_guest'
-            ? `Reservaste ${payload.gift}`
-            : `Nuevo regalo reservado: ${payload.gift}`;
-      await sendMail(row.recipient, subject, `<p>${escapeHtml(payload.person || '')}, hay una novedad sobre <strong>${escapeHtml(payload.gift || payload.listTitle || 'tu lista')}</strong>.</p>`);
-      await pool.query(`update notification_outbox set status = 'sent' where id = $1`, [row.id]);
-    } catch (error) {
-      console.error(error);
-      await pool.query(`update notification_outbox set status = 'failed' where id = $1`, [row.id]);
+  if (!env('RESEND_API_KEY') || !env('EMAIL_FROM')) return;
+  try {
+    const { rows } = await pool.query(
+      `select * from notification_outbox where status in ('pending', 'failed') and attempts < 8 order by created_at asc limit 20`,
+    );
+    for (const row of rows) {
+      try {
+        const { subject, html } = mailMessage(row.template, row.payload);
+        await sendMail(row.recipient, subject, html);
+        await pool.query(`update notification_outbox set status = 'sent' where id = $1`, [row.id]);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : 'error';
+        console.error(`No salió el mail a ${row.recipient} (${row.template}): ${detail}`);
+        await pool.query(`update notification_outbox set status = 'failed', attempts = attempts + 1 where id = $1`, [row.id]);
+      }
     }
+  } catch (error) {
+    console.error(error);
   }
 }
 
 async function boot() {
   const schema = readFileSync(path.join(root, 'schema.sql'), 'utf8');
   await pool.query(schema);
+  await pool.query(`update notification_outbox set attempts = 0 where status = 'failed'`);
+  if (env('RESEND_API_KEY') && env('EMAIL_FROM')) {
+    console.log('Mails activos.');
+  } else {
+    console.error('Mails apagados. En el servicio de la app faltan RESEND_API_KEY o EMAIL_FROM.');
+  }
   await mkdir(uploadDir, { recursive: true });
   if (staticDir) {
     app.use(express.static(staticDir));
