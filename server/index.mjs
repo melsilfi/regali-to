@@ -954,49 +954,16 @@ function mailMessage(template, payload) {
   };
 }
 
-const resendTemplates = new Set([
-  'gift_reserved',
-  'gift_reserved_guest',
-  'suggestion_accepted',
-  'suggestion_rejected',
-]);
-
-function templateVariables(payload) {
-  const notice = asNotice(payload);
-  const site = env('SITE_URL').replace(/\/$/, '');
-  return {
-    PERSON: notice.person || '',
-    GIFT: notice.gift || '',
-    LIST_TITLE: notice.listTitle || '',
-    OWNER_NAME: notice.ownerName || '',
-    EVENT_DATE: formatEventDate(notice.eventDate),
-    DATE: formatWhen(notice.date),
-    DESCRIPTION: notice.description || '',
-    PHONE: notice.phone || '',
-    GUEST_EMAIL: notice.email || '',
-    MESSAGE: notice.message || '',
-    LIST_URL: site && notice.listSlug ? `${site}/${notice.listSlug}` : '',
-  };
-}
-
-async function postMail(body) {
+async function sendMail(to, subject, html) {
   const result = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env('RESEND_API_KEY')}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ from: env('EMAIL_FROM'), to: [to], subject, html }),
   });
   if (!result.ok) throw new Error(await result.text());
-}
-
-async function sendMail(to, subject, html) {
-  await postMail({ from: env('EMAIL_FROM'), to: [to], subject, html });
-}
-
-async function sendTemplate(to, template, variables) {
-  await postMail({ to: [to], template: { id: template, variables } });
 }
 
 async function flushOutbox() {
@@ -1007,16 +974,6 @@ async function flushOutbox() {
     );
     for (const row of rows) {
       try {
-        if (resendTemplates.has(row.template)) {
-          try {
-            await sendTemplate(row.recipient, row.template, templateVariables(row.payload));
-            await pool.query(`update notification_outbox set status = 'sent' where id = $1`, [row.id]);
-            continue;
-          } catch (error) {
-            const detail = error instanceof Error ? error.message : 'error';
-            console.error(`No se pudo usar el template ${row.template}: ${detail}`);
-          }
-        }
         const { subject, html } = mailMessage(row.template, row.payload);
         await sendMail(row.recipient, subject, html);
         await pool.query(`update notification_outbox set status = 'sent' where id = $1`, [row.id]);
