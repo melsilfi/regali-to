@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { access, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import bcrypt from 'bcryptjs';
@@ -125,10 +125,74 @@ app.post('/api/auth/login', async (request, response) => {
   const password = `${request.body?.password ?? ''}`;
   const { rows } = await pool.query('select * from users where email = $1', [email]);
   const user = rows[0];
-  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+  if (!user?.password_hash || !(await bcrypt.compare(password, user.password_hash))) {
     return fail(response, 401, 'Email o contraseña incorrectos.');
   }
   response.json({ token: tokenFor(user), user: publicUser(user) });
+});
+
+app.get('/api/auth/google', (request, response) => {
+  const site = env('SITE_URL').replace(/\/$/, '');
+  if (!site || !env('GOOGLE_CLIENT_ID') || !env('GOOGLE_CLIENT_SECRET')) {
+    return response.redirect(`${site || ''}/auth/callback?error_description=${encodeURIComponent('El ingreso con Google no está configurado.')}`);
+  }
+  const state = jwt.sign({ purpose: 'google' }, jwtSecret, { expiresIn: '10m' });
+  const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  url.searchParams.set('client_id', env('GOOGLE_CLIENT_ID'));
+  url.searchParams.set('redirect_uri', `${site}/api/auth/google/callback`);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('scope', 'openid email profile');
+  url.searchParams.set('state', state);
+  url.searchParams.set('prompt', 'select_account');
+  response.redirect(url.toString());
+});
+
+app.get('/api/auth/google/callback', async (request, response) => {
+  const site = env('SITE_URL').replace(/\/$/, '');
+  const back = (message) => response.redirect(`${site}/auth/callback?error_description=${encodeURIComponent(message)}`);
+  try {
+    const state = jwt.verify(`${request.query.state ?? ''}`, jwtSecret);
+    if (!state || typeof state === 'string' || state.purpose !== 'google') return back('El ingreso con Google venció. Probá de nuevo.');
+    const code = `${request.query.code ?? ''}`;
+    if (!code) return back('Google no devolvió el ingreso.');
+    const redirectUri = `${site}/api/auth/google/callback`;
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code,
+        client_id: env('GOOGLE_CLIENT_ID'),
+        client_secret: env('GOOGLE_CLIENT_SECRET'),
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+    if (!tokenResponse.ok) return back('Google no confirmó el ingreso.');
+    const tokens = await tokenResponse.json();
+    const profileResponse = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${tokens.access_token}` },
+    });
+    if (!profileResponse.ok) return back('No pudimos leer la cuenta de Google.');
+    const profile = await profileResponse.json();
+    const email = `${profile.email ?? ''}`.trim().toLowerCase();
+    if (!email || profile.email_verified === false) return back('Google no confirmó el email.');
+    const name = `${profile.name ?? email.split('@')[0]}`.trim() || email;
+    const existing = await pool.query('select id, name, email from users where email = $1', [email]);
+    let user = existing.rows[0];
+    if (user) {
+      await pool.query('update users set google_sub = $2 where id = $1 and google_sub is null', [user.id, profile.sub]);
+    } else {
+      const inserted = await pool.query(
+        'insert into users (name, email, google_sub) values ($1, $2, $3) returning id, name, email',
+        [name, email, profile.sub],
+      );
+      user = inserted.rows[0];
+    }
+    response.redirect(`${site}/auth/callback#token=${encodeURIComponent(tokenFor(user))}`);
+  } catch (error) {
+    console.error(error);
+    back('No pudimos completar el ingreso con Google.');
+  }
 });
 
 app.get('/api/auth/me', async (request, response) => {
@@ -154,7 +218,12 @@ app.post('/api/auth/forgot', async (request, response) => {
       await sendMail(
         user.email,
         'Recuperar tu contraseña',
-        `<p>Hola ${escapeHtml(user.name)},</p><p><a href="${link}">Elegí una contraseña nueva</a>. El enlace vence en 2 horas.</p>`,
+        mailLayout({
+          kicker: 'Cuenta',
+          title: 'Elegí una contraseña nueva',
+          body: `<p style="margin:0;">Hola ${escapeHtml(user.name)}, recibimos un pedido para cambiar tu contraseña. El enlace vence en 2 horas.</p>`,
+          action: { href: link, label: 'Cambiar contraseña' },
+        }),
       );
     } catch (error) {
       console.error('No se pudo enviar el mail para recuperar la contraseña.', error instanceof Error ? error.message : error);
@@ -182,12 +251,12 @@ app.get('/api/lists', async (request, response) => {
   const user = requireUser(request, response);
   if (!user) return;
   const { rows } = await pool.query('select * from gift_lists where user_id = $1 order by created_at desc', [user.id]);
-  response.json(rows);
+  response.json(rows.map(withPublicImages));
 });
 
 app.get('/api/lists/public/:slug', async (request, response) => {
   const { rows } = await pool.query('select * from gift_lists where slug = $1 and is_public = true', [request.params.slug]);
-  response.json(rows[0] ?? null);
+  response.json(withPublicImages(rows[0] ?? null));
 });
 
 app.post('/api/lists', async (request, response) => {
@@ -205,7 +274,7 @@ app.post('/api/lists', async (request, response) => {
        values ($1, $2, $3, $4, $5, $6, $7, $8) returning *`,
       [user.id, input.ownerName, input.slug, input.title, input.description, input.eventDate, input.coverImage, input.guestOptions],
     );
-    response.json(rows[0]);
+    response.json(withPublicImages(rows[0]));
   } catch (error) {
     fail(response, 400, sqlMessage(error));
   }
@@ -225,7 +294,7 @@ app.patch('/api/lists/:id', async (request, response) => {
       [request.params.id, user.id, input.ownerName, input.slug, input.title, input.description, input.eventDate, input.coverImage, input.guestOptions],
     );
     if (!rows[0]) return fail(response, 404, 'No encontramos esa lista.');
-    response.json(rows[0]);
+    response.json(withPublicImages(rows[0]));
   } catch (error) {
     fail(response, 400, sqlMessage(error));
   }
@@ -570,12 +639,29 @@ app.post('/api/uploads', upload.single('file'), async (request, response) => {
   await mkdir(uploadDir, { recursive: true });
   const name = `${user.id}-${randomUUID()}-${file.originalname.replace(/[^\w.]+/g, '-')}`;
   await writeFile(path.join(uploadDir, name), file.buffer);
-  const proto = request.get('x-forwarded-proto') || request.protocol;
-  const host = request.get('x-forwarded-host') || request.get('host');
-  response.json({ url: `${proto}://${host}/uploads/${name}` });
+  await pool.query(
+    `insert into uploads (filename, mime, bytes) values ($1, $2, $3)
+     on conflict (filename) do update set mime = excluded.mime, bytes = excluded.bytes`,
+    [name, file.mimetype, file.buffer],
+  );
+  response.json({ url: `/uploads/${name}` });
 });
 
-app.use('/uploads', express.static(uploadDir));
+app.get('/uploads/:name', async (request, response) => {
+  const name = path.basename(request.params.name);
+  if (!name || name !== request.params.name) return response.status(404).end();
+  const filePath = path.join(uploadDir, name);
+  try {
+    await access(filePath);
+    return response.sendFile(filePath);
+  } catch {
+    const { rows } = await pool.query('select mime, bytes from uploads where filename = $1', [name]);
+    if (!rows[0]) return response.status(404).end();
+    response.setHeader('Content-Type', rows[0].mime);
+    response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    response.send(rows[0].bytes);
+  }
+});
 
 async function reserveGift(giftId, body, asOwner) {
   const name = `${body?.name ?? ''}`.trim();
@@ -679,8 +765,25 @@ function giftInput(body) {
   };
 }
 
+function uploadPath(value) {
+  if (!value || typeof value !== 'string') return value;
+  const match = value.match(/\/uploads\/([^?#]+)/);
+  return match ? `/uploads/${decodeURIComponent(match[1])}` : value;
+}
+
+function withPublicImages(row) {
+  if (!row) return row;
+  const next = { ...row };
+  if ('cover_image' in next) next.cover_image = uploadPath(next.cover_image);
+  if ('image_url' in next) next.image_url = uploadPath(next.image_url);
+  return next;
+}
+
 function numberGift(row) {
-  return { ...row, estimated_price: row.estimated_price == null ? null : Number(row.estimated_price) };
+  return {
+    ...withPublicImages(row),
+    estimated_price: row.estimated_price == null ? null : Number(row.estimated_price),
+  };
 }
 
 function numberSuggestion(row) {
@@ -730,6 +833,59 @@ function formatEventDate(value) {
   return date.toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+function mailRows(pairs) {
+  const rows = pairs.filter(([, value]) => value);
+  if (!rows.length) return '';
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:18px;border-collapse:collapse;">
+    ${rows
+      .map(
+        ([label, value]) => `<tr>
+          <td style="width:38%;padding:10px 12px 10px 0;border-top:1px solid #e7ebf1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;letter-spacing:0.04em;text-transform:uppercase;color:#8b93a3;vertical-align:top;">${escapeHtml(label)}</td>
+          <td style="padding:10px 0;border-top:1px solid #e7ebf1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.45;color:#1e3358;vertical-align:top;">${escapeHtml(value)}</td>
+        </tr>`,
+      )
+      .join('')}
+  </table>`;
+}
+
+function mailLayout({ kicker, title, body, action }) {
+  const site = env('SITE_URL').replace(/\/$/, '');
+  const logo = site ? `${site}/logo.png` : '';
+  const button = action
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;"><tr><td style="border-radius:999px;background:#1e3358;">
+         <a href="${escapeHtml(action.href)}" style="display:inline-block;padding:13px 22px;font-family:Georgia,'Times New Roman',serif;font-size:15px;line-height:1;color:#ffffff;text-decoration:none;">${escapeHtml(action.label)}</a>
+       </td></tr></table>`
+    : '';
+  return `<!doctype html>
+<html lang="es">
+<body style="margin:0;padding:0;background:#f3f5f8;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f5f8;">
+    <tr><td align="center" style="padding:32px 12px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:18px;overflow:hidden;">
+        <tr><td style="height:6px;background:#1e3358;font-size:0;line-height:0;">&nbsp;</td></tr>
+        <tr><td style="padding:28px 32px 0;">
+          ${
+            logo
+              ? `<img src="${escapeHtml(logo)}" alt="Regali" width="148" style="display:block;width:148px;max-width:148px;height:auto;border:0;">`
+              : `<p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:22px;color:#1e3358;">Regali</p>`
+          }
+        </td></tr>
+        <tr><td style="padding:22px 32px 32px;">
+          <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:#8b93a3;">${escapeHtml(kicker)}</p>
+          <h1 style="margin:0 0 14px;font-family:Georgia,'Times New Roman',serif;font-weight:500;font-size:28px;line-height:1.25;color:#1e3358;">${escapeHtml(title)}</h1>
+          <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.6;color:#3c4656;">${body}</div>
+          ${button}
+        </td></tr>
+        <tr><td style="padding:16px 32px 22px;border-top:1px solid #e7ebf1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:12px;line-height:1.5;color:#8b93a3;">
+          Regali · avisos de tu lista de regalos
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
+
 function mailMessage(template, payload) {
   const notice = asNotice(payload);
   const site = env('SITE_URL').replace(/\/$/, '');
@@ -744,31 +900,58 @@ function mailMessage(template, payload) {
     : guest
       ? `Reservaste ${notice.gift}`
       : `Nuevo regalo reservado: ${notice.gift}`;
-  const html = suggestion
-    ? `<h1>${accepted ? 'Aceptaron tu sugerencia' : 'No van a cambiar el regalo'}</h1>
-       <p>Hola ${escapeHtml(notice.person)}, ${
-         accepted
-           ? `aceptaron tu sugerencia de <strong>${escapeHtml(notice.gift)}</strong> en la lista <strong>${escapeHtml(notice.listTitle)}</strong>. El regalo ya está actualizado.`
-           : `revisaron tu sugerencia de <strong>${escapeHtml(notice.gift)}</strong> en la lista <strong>${escapeHtml(notice.listTitle)}</strong> y van a dejar el regalo como estaba.`
-       }</p>
-       <p>${listUrl ? `<a href="${escapeHtml(listUrl)}">Abrí la lista de nuevo</a>` : 'Volvé a abrir el link de la lista'} para ver cómo quedó.</p>`
-    : guest
-      ? `<h1>Reservaste un regalo</h1>
-         <p>Hola ${escapeHtml(notice.person)}, confirmamos que te comprometiste a comprar <strong>${escapeHtml(notice.gift)}</strong>.</p>
-         <p><strong>Evento:</strong> ${escapeHtml(notice.listTitle)}</p>
-         <p><strong>De:</strong> ${escapeHtml(notice.ownerName || notice.listTitle)}</p>
-         <p><strong>Fecha del evento:</strong> ${escapeHtml(formatEventDate(notice.eventDate))}</p>
-         <p><strong>Reserva:</strong> ${escapeHtml(formatWhen(notice.date))}</p>
-         ${notice.description ? `<p>${escapeHtml(notice.description)}</p>` : ''}
-         <p>Gracias. El regalo quedó reservado a tu nombre para que otra persona no elija el mismo.</p>`
-      : `<h1>Nuevo regalo reservado</h1>
-         <p><strong>Persona:</strong> ${escapeHtml(notice.person)}</p>
-         <p><strong>Teléfono:</strong> ${escapeHtml(notice.phone)}</p>
-         <p><strong>Email:</strong> ${escapeHtml(notice.email || '—')}</p>
-         <p><strong>Regalo:</strong> ${escapeHtml(notice.gift)}</p>
-         <p><strong>Fecha:</strong> ${escapeHtml(formatWhen(notice.date))}</p>
-         <p><strong>Mensaje:</strong> ${escapeHtml(notice.message || '—')}</p>`;
-  return { subject, html };
+  const action = listUrl ? { href: listUrl, label: 'Abrir la lista' } : null;
+  if (suggestion) {
+    return {
+      subject,
+      html: mailLayout({
+        kicker: notice.listTitle || 'Sugerencia',
+        title: accepted ? 'Aceptaron tu sugerencia' : 'No van a cambiar el regalo',
+        body: `<p style="margin:0;">Hola ${escapeHtml(notice.person)}, ${
+          accepted
+            ? `aceptaron tu sugerencia de <strong>${escapeHtml(notice.gift)}</strong> en <strong>${escapeHtml(notice.listTitle)}</strong>. El regalo ya está actualizado.`
+            : `revisaron tu sugerencia de <strong>${escapeHtml(notice.gift)}</strong> en <strong>${escapeHtml(notice.listTitle)}</strong> y van a dejar el regalo como estaba.`
+        }</p>${mailRows([
+          ['Regalo', notice.gift],
+          ['Antes era', notice.description],
+        ])}`,
+        action,
+      }),
+    };
+  }
+  if (guest) {
+    return {
+      subject,
+      html: mailLayout({
+        kicker: notice.listTitle || 'Reserva',
+        title: 'Reservaste un regalo',
+        body: `<p style="margin:0;">Hola ${escapeHtml(notice.person)}, confirmamos que te comprometiste a comprar <strong>${escapeHtml(notice.gift)}</strong>. Quedó a tu nombre para que otra persona no elija el mismo.</p>${mailRows([
+          ['Evento', notice.listTitle],
+          ['De', notice.ownerName],
+          ['Fecha', formatEventDate(notice.eventDate)],
+          ['Reserva', formatWhen(notice.date)],
+          ['Detalle', notice.description],
+        ])}`,
+        action,
+      }),
+    };
+  }
+  return {
+    subject,
+    html: mailLayout({
+      kicker: notice.listTitle || 'Reserva',
+      title: 'Nuevo regalo reservado',
+      body: `<p style="margin:0;">Alguien se comprometió a comprar <strong>${escapeHtml(notice.gift)}</strong>.</p>${mailRows([
+        ['Persona', notice.person],
+        ['Teléfono', notice.phone],
+        ['Email', notice.email],
+        ['Regalo', notice.gift],
+        ['Fecha', formatWhen(notice.date)],
+        ['Mensaje', notice.message],
+      ])}`,
+      action,
+    }),
+  };
 }
 
 async function sendMail(to, subject, html) {

@@ -19,9 +19,14 @@ create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   email text not null unique,
-  password_hash text not null,
+  password_hash text,
+  google_sub text unique,
   created_at timestamptz not null default now()
 );
+
+alter table users alter column password_hash drop not null;
+alter table users add column if not exists google_sub text;
+create unique index if not exists users_google_sub_idx on users (google_sub) where google_sub is not null;
 
 create table if not exists password_resets (
   token text primary key,
@@ -117,6 +122,13 @@ create table if not exists transfer_notices (
   destination text not null,
   buyer text not null,
   dedication text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists uploads (
+  filename text primary key,
+  mime text not null,
+  bytes bytea not null,
   created_at timestamptz not null default now()
 );
 

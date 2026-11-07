@@ -32,6 +32,7 @@ export class AuthService {
       this.finish();
       return Promise.resolve();
     }
+    this.captureGoogleToken();
     if (!this.api.token()) {
       this.finish();
       return Promise.resolve();
@@ -52,7 +53,7 @@ export class AuthService {
       this.user.set(this.demo.signInDemoOwner());
       return;
     }
-    throw new Error('En esta versión el ingreso es con email y contraseña.');
+    window.location.assign(`${environment.apiUrl}/api/auth/google`);
   }
 
   async signUp(name: string, email: string, password: string): Promise<'session' | 'confirm-email'> {
@@ -115,6 +116,14 @@ export class AuthService {
     }
     this.api.clearToken();
     this.user.set(null);
+  }
+
+  private captureGoogleToken(): void {
+    if (typeof window === 'undefined' || !window.location.pathname.endsWith('/auth/callback')) return;
+    const token = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('token');
+    if (!token) return;
+    this.api.saveToken(token);
+    window.history.replaceState(null, '', window.location.pathname);
   }
 
   private finish(): void {
